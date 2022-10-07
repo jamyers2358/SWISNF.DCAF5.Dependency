@@ -1,0 +1,176 @@
+---
+title: "Transcriptional evaluation of the relationship between SMARCB1 and DACF"
+author: "JA Myers"
+date: "01/08/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+# load package
+library(edgeR)
+library(limma)
+library(pheatmap)
+library(ggplot2)
+library(DESeq2)
+library(EnhancedVolcano)
+
+counts <- read.table(file="ROBERTS-209160-STRANDED_RSEM_count.txt", sep = "\t", header = TRUE, row.names = 1, check.names = F)
+colnames(counts)
+subset <- counts[counts$bioType=="protein_coding",c(4:length(colnames(counts)))]
+colnames(subset)
+```
+
+
+```{r}
+# define group
+groupLabels <- c(rep("GFP_shctrl",3), rep("GFP_shdcaf5",3), rep("SB1_shctrl",3), rep("SB1_shdcaf5",3))
+TS <- factor(groupLabels, levels = c("GFP_shctrl", "GFP_shdcaf5", "SB1_shctrl", "SB1_shdcaf5"))
+#batch correction: batch can be added as a covariate if needed
+#this code does not do batch correction
+design <- model.matrix(~ 0 + TS )
+colnames(design) <- levels(TS)
+
+```
+
+
+
+```{r fig.width=7 , fig.height=7}
+coldata <- data.frame(samples = colnames(subset), condition =groupLabels)
+write.table(coldata, file="SRJ_meta_data.txt", quote=F, sep="\t")
+class(subset)
+dds <- DESeqDataSetFromMatrix(countData = round(subset),
+                               colData = coldata,
+                               design= ~ condition)
+rld <- vst(dds)
+plot <- plotPCA(rld, intgroup = "condition")
+plot + scale_color_manual(values=c("red","orange","darkgreen","blue"))+geom_point(size=3)
+p <- plotPCA(rld, intgroup = "condition", returnData = TRUE)
+plot <- ggplot(p, aes(p$PC1, p$PC2,label=rownames(p))) + geom_point(aes(color=p$condition)) + geom_text(aes(color=p$condition))
+plot + scale_color_manual(values=c("red","orange","darkgreen","blue"))+geom_point(size=3)
+```
+
+
+
+
+```{r}
+# x = name of comparison must be a level in cont.matrix
+# y = log2FC cut off 
+process_comparisons <- function(x){
+  print(x)
+  results <- topTable(fitcon, n = Inf, sort.by="P", coef=x)
+  outFile <- paste0(x, "_noRELAB_diff.txt")
+  
+  results$symbol <- "GENE"
+  print(dim(results))
+  
+     for (i in 1:nrow(results)) {
+      #print(i)
+      tmp_id <- rownames(results)[i]
+       #print(tmp_id)
+      results$symbol[i] <- as.character(counts[rownames(counts) == tmp_id,1])
+     }
+  # populate the file with the object that contains the gene symbols as well
+  write.table(results, file = outFile, sep = "\t", col.names = TRUE, row.names = TRUE, quote = F)
+  
+  print("Genes down-regulated logFC < 0")
+  dn <-  results[results$adj.P.Val < 0.05 & results$logFC < 0,] 
+  print(dim(dn)) 
+  print("Genes up-regulated logFC > 0")
+  up <-  results[results$adj.P.Val < 0.05 & results$logFC > 0,] 
+  print(dim(up))
+  print("Genes down-regulated logFC < -1")
+  dn <-  results[results$adj.P.Val < 0.05 & results$logFC < -1,] 
+  print(dim(dn))
+  print("Genes up-regulated logFC > 1")
+  up <-  results[results$adj.P.Val < 0.05 & results$logFC > 1,] 
+  print(dim(up))
+  deg <- results[(results$adj.P.Val < 0.05 & results$logFC > 0) | (results$adj.P.Val < 0.05 & results$logFC < 0),]
+  
+  # generate the heat map including all samples 
+  
+  norm_counts <- cpm(dge)
+  deg_subset <- norm_counts[rownames(norm_counts) %in% rownames(deg),]
+  dim(deg_subset)
+  anno <- data.frame(condition = coldata$condition)
+  rownames(anno) <- coldata$samples
+  print(pheatmap(deg_subset, scale = 'row', show_rownames = F, annotation_col = anno))
+  outFile <- paste0(x, "_noRELAB_heatmap.pdf")
+  xx <- pheatmap(deg_subset, scale = 'row', show_rownames = F, annotation_col = anno)
+  save_pheatmap_pdf(xx, outFile)
+  # generate a volcano plot and label the NSD1 and SMARCB1 gene 
+     print(EnhancedVolcano(results,
+    lab = results$symbol,
+    x = 'logFC',
+    y = 'P.Value',
+    xlim = c(min(results$logFC)-1, max(results$logFC)+1)))
+  
+  outFile <- paste0(x, "_noRELAB_volcano.tiff")
+  tiff(outFile, height = 8, width = 8, units = "in", res = 300)
+   print(EnhancedVolcano(results,
+    lab = results$symbol,
+    x = 'logFC',
+    y = 'P.Value',
+    xlim = c(min(results$logFC)-1, max(results$logFC)+1)))
+   dev.off()
+  return(results)
+}
+
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+   stopifnot(!missing(x))
+   stopifnot(!missing(filename))
+   pdf(filename, width=width, height=height)
+   grid::grid.newpage()
+   grid::grid.draw(x$gtable)
+   dev.off()
+}
+
+
+
+clean_id <- function(x){
+  clean_ids <- sapply(strsplit(x[1:length(x)], "\\."), "[",1)
+  return(clean_ids)
+}
+
+```
+
+```{r}
+coldata
+
+```
+
+
+```{r fig.width=8,fig.height=8}
+dge <- DGEList(counts = subset, group = groupLabels)
+# filter out low expressed genes
+cpm_cutoff=10
+cutoff <- as.vector(cpm(cpm_cutoff,mean(dge$samples$lib.size) ) )
+keep <- rowSums(cpm(dge) > cutoff) >= min(as.numeric(table(groupLabels)))
+summary(keep)
+dge <- dge[keep, keep.lib.sizes = FALSE]
+dge <- calcNormFactors(dge)
+ 
+v <- voom(dge, design, plot = T)
+fit <- lmFit(v, design)
+cont.matrix <- makeContrasts(GFP_shdcaf5vsGFP_shctrl  = (GFP_shdcaf5  - GFP_shctrl ),SB1_shdcaf5vsSB1_shctrl  = (SB1_shdcaf5  - SB1_shctrl ), SB1_shdcaf5vsGFP_shdcaf5 = ( SB1_shdcaf5 - GFP_shdcaf5), SB1_shctrlvsGFP_shctrl = (SB1_shctrl - GFP_shctrl), SB1_shdcaf5vsGFP_shctrl= (SB1_shdcaf5 - GFP_shctrl),
+                    levels = design)
+fitcon <- contrasts.fit(fit, cont.matrix)
+fitcon <- eBayes(fitcon)
+class(cont.matrix)
+comparisons <- c("GFP_shdcaf5vsGFP_shctrl","SB1_shdcaf5vsSB1_shctrl", "SB1_shdcaf5vsGFP_shdcaf5", "SB1_shctrlvsGFP_shctrl","SB1_shdcaf5vsGFP_shctrl")
+
+for(i in 1:length(comparisons)) {
+  print(comparisons[i])
+  process_comparisons(comparisons[i])
+} 
+
+```
+
+
+```{r}
+sessionInfo()
+```
