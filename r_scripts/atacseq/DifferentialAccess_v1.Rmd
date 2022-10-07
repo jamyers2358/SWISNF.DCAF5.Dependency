@@ -1,0 +1,141 @@
+---
+title: "Differential accessibility"
+author: "JA Myers"
+date: "09/07/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Goal of the analysis is to identify NFR that are differential in response to loss of DCAF5
+
+```{r}
+library(edgeR)
+counts <- read.delim(file="../../count_reads/shCTRL.shDCAF5.All.Repro.NFR.count.dat",header=T,row.names=1)
+colnames(counts)
+ncol(counts)
+```
+
+
+```{r}
+aaa <- counts
+print(paste("Raw:",nrow(aaa)))
+xx <- apply(aaa,1,function(x) any(is.na(x)))
+aaa <- aaa[!xx,]
+print(paste("NA_Filter:",nrow(aaa)))
+xx <- apply(aaa,1,function(x) any(x >0))
+aaa <- aaa[xx,]
+print(paste("None0_Filter:",nrow(aaa)))
+ 
+counts <- as.matrix(counts[,1:6])
+colnames(counts)
+dim(counts) 
+
+#FPKM would be less affect by peak size. #groupLabels like the RNAseq version
+groupLabels <- c(rep("shCTRL",3),rep("shDCAF5",3))
+#Personally, I would suggest FPKM cutoff 0.05 for either WT or KO but this is not always applicable
+dge00<-DGEList(counts=counts, group=groupLabels)
+dge00 <- calcNormFactors(dge00)
+cps <- cpm(dge00)
+dim(cps)
+cpm2fpkm <- function(cpmtmp,ifoutgenelen=0){
+    cpmtmp <- as.data.frame(cpmtmp)
+    genlens <- cpmtmp
+    genlens$lregion <- unlist(lapply(row.names(genlens),function(bb){cc <- as.numeric(unlist(strsplit(strsplit(bb,":")[[1]][2],"-"))); cc[2] - cc[1]}))
+    genlens <- genlens[,grepl("lregion",names(genlens)),drop=F]
+    cpmtmp <- cpmtmp[row.names(cpmtmp) %in% row.names(genlens),,drop=F]
+    cpmtmp$orderid  <- 1:nrow(cpmtmp)
+    aaa <- merge(cpmtmp,genlens,by="row.names",sort=FALSE)
+    aaa <- aaa[order(aaa$orderid),]
+    aaa <- aaa[,-which(names(aaa) == "orderid")]
+    row.names(aaa) <- aaa[[1]]
+    aaa[[1]] <- NULL
+    aaa <- aaa*1000/aaa[,length(names(aaa))]
+    nnc <- ncol(aaa) - 1
+    nnr <- nrow(aaa)
+    namer <- rownames(aaa)
+    namec <- colnames(aaa)[-length(names(aaa))]
+    aaa <- aaa[,-length(names(aaa))]
+    matrix(as.matrix(aaa), nrow=nnr, ncol=nnc, dimnames=list(namer,namec))
+    remx <- matrix(as.matrix(aaa), nrow=nnr, ncol=nnc, dimnames=list(namer,namec))
+    if (ifoutgenelen){
+        list(remx, genlens)
+    } else {
+        remx
+    }
+}
+fpkm <- cpm2fpkm(cps)
+head(fpkm) 
+dim(fpkm)
+write.table(fpkm, file="shcTRL_shDCAF5_FPKM.txt",sep="\t")
+```
+
+
+```{r}
+library(limma)
+ 
+# define group
+TS <- factor(groupLabels, levels = c("shCTRL", "shDCAF5"))
+colnames(fpkm)
+head(fpkm)
+plotMDS(fpkm, pch = 4, col = c(rep("orange",3), rep("red",5)),labels =c(rep("shCTRL",3), rep("shDCAF5",3)) )
+plotMDS(fpkm, pch = 4, col = c(rep("orange",3), rep("red",5)),labels =colnames(fpkm) )
+```
+
+```{r}
+ 
+#batch correction: batch can be added as a covariate if needed
+#this code does not do batch correction
+design <- model.matrix(~ 0 + TS )
+colnames(design) <- levels(TS)
+
+ 
+# filter out low expressed genes
+fpkm_cutoff=0.05
+#cutoff <- as.vector(cpm(fpkm_cutoff,mean(dge00$samples$lib.size) ) )
+keep <- rowSums(fpkm > fpkm_cutoff) >= min(as.numeric(table(groupLabels)))
+dge00 <- dge00[keep, keep.lib.sizes = FALSE]
+dge00 <- calcNormFactors(dge00)
+ 
+v <- voom(dge00, design, plot = F)
+fit <- lmFit(v, design)
+cont.matrix <- makeContrasts(shDCAF5vsshCTRL = (shDCAF5 - shCTRL), levels = design)
+fitcon <- contrasts.fit(fit, cont.matrix)
+fitcon <- eBayes(fitcon)
+ 
+results1 <- topTable(fitcon, n = Inf, sort.by="P", coef="shDCAF5vsshCTRL")
+outFile1 <- paste0("shDCAF5vsshCTRL", "_diff.txt")
+```
+
+this file can be parsed using bash to create bed files of regions gained/lost 
+
+```{r}
+write.table(results1, file = outFile1, sep = "\t", col.names = TRUE, row.names = TRUE, quote = F)
+```
+
+how many regions gain accessibility in shDCAF5 vs. shCTRL??
+
+```{r}
+dim(results1[results1$adj.P.Val < 0.05 & results1$logFC> 1,])
+```
+
+
+```{r}
+dim(results1[results1$adj.P.Val < 0.05 & results1$logFC< -1,])
+```
+
+make a volcano plot of regions
+
+```{r fig.width=8, fig.height=8}
+library(EnhancedVolcano)
+EnhancedVolcano(results1, lab = NA,
+    x = 'logFC',
+    y = 'P.Value',
+    xlim = c(-5, 5))
+```
+
+```{r}
+sessionInfo()
+```
