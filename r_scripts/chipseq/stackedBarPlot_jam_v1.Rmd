@@ -1,0 +1,38 @@
+---
+title: "Genomic Dist Figure"
+author: "JA Myers"
+date: "08/25/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Wojciech provided a tsv of region counts binned into genomic locations. i want to make a publication quality figure that is using pieces of this file. 
+
+```{r}
+genomic_loc <- read.delim(file="stackedbarplot_in_jam.txt",header=T)
+
+```
+
+
+```{r}
+library(ggplot2)
+
+ggplot(genomic_loc, aes(fill=category, y=counts, x=mark)) + geom_bar(position = "fill", stat = "identity") +  ggtitle(" ") +
+  xlab(" ") + ylab(" ")+
+  theme(plot.title = element_text(hjust = 0.5)) + scale_fill_manual(values=c("Blue","DarkTurquoise", "#33FF99", "DarkSlateBlue", "#669933", "DarkGreen", "#CC0033", "#FF00CC", "#CC99FF", "DarkKhaki", "Yellow", "#FFFFCC")) + theme_classic()
+
+plot <- ggplot(genomic_loc, aes(fill=category, y=counts, x=mark)) + geom_bar(position = "fill", stat = "identity") +  ggtitle(" ") +
+  xlab(" ") + ylab(" ")+
+  theme(plot.title = element_text(hjust = 0.5)) + scale_fill_manual(values=c("Blue","DarkTurquoise", "#33FF99", "DarkSlateBlue", "#669933", "DarkGreen", "#CC0033", "#FF00CC", "#CC99FF", "DarkKhaki", "Yellow", "#FFFFCC")) + theme_classic()
+
+ggsave(file="CustomStackedBarPlot_jam.svg", plot=plot, width=6, height=4)
+
+```
+
+
+```{r}
+sessionInfo()
+```
