@@ -1,0 +1,190 @@
+---
+title: "DCAF5 CRISPR-Cas9 Screens"
+author: "Neekesh V. Dharia modified by Jacquelyn A. Myers (05-22-2023)"
+output: html_document
+---
+
+```{r warning=FALSE, message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(ggpubr)
+library(ggthemes)
+library(magrittr)
+library(data.table)
+library(DT)
+library(matrixStats)
+
+source('load_data_21Q1.R')
+source('functions.R')
+
+gene_effect <- load_gene_effect()
+dim(gene_effect)
+head( )
+Rhabdoid_lines <- mf %>% dplyr::filter(Type == "Rhabdoid") %$% CCLE_name
+length(Rhabdoid_lines)
+Rhabdoid_lines
+```
+
+
+# Volcano plots showing DCAF5 dependency enrichment in Rhabdoid
+
+
+```{r warning=FALSE, message=FALSE, fig.width=2, fig.height=2}
+# Avana 21q1 
+context_matrix <- gene_effect[,1,drop=F]
+colnames(context_matrix) <- "Rhabdoid"
+context_matrix[,1] <- 0
+context_matrix[rownames(context_matrix) %in% Rhabdoid_lines,1] <- 1
+table(context_matrix)
+df <- as.data.frame(context_matrix)
+df$lines <- rownames(df)
+df[df$Rhabdoid == 1,]
+
+ttest_Rhabdoid_v_all <- run_lm_stats_limma(gene_effect, context_matrix[,1])
+ttest_Rhabdoid_v_all$Gene <- gsub("\\ .*","",ttest_Rhabdoid_v_all$Gene)
+ttest_Rhabdoid_v_all_avana <- ttest_Rhabdoid_v_all
+ttest_Rhabdoid_v_all_avana$logq <- -log10(ttest_Rhabdoid_v_all_avana$q.value)
+write.table(ttest_Rhabdoid_v_all_avana, file="ttest_Rhabdoid_v_all_avana_21Q1.txt")
+
+p <- ggplot(ttest_Rhabdoid_v_all, aes(x = EffectSize, y = -log10(q.value))) + 
+  geom_point(size=2, pch=21, stroke = 0.25, fill = "black") + 
+  theme_light() + theme(panel.grid = element_blank(), panel.border = element_blank(), axis.line = element_line(size=0.5), 
+                        axis.ticks = element_line(size=0.5, color="black"), text = element_text(size = 8, color = "black"), 
+                        axis.text = element_text(size = 8, color = "black"), plot.title = element_text(size = 8, color = "black")) +
+  xlab("Effect Size") + ylab("-log10(q-value)") + 
+  geom_point(data = ttest_Rhabdoid_v_all[ttest_Rhabdoid_v_all$Gene == "DCAF5",,drop=F], 
+             aes(x = EffectSize, y = -log10(q.value)), fill = "red", size = 2,  pch=21, stroke = 0.25) + 
+  geom_text_repel(data = ttest_Rhabdoid_v_all[ttest_Rhabdoid_v_all$Gene == "DCAF5",,drop=F], 
+                   aes(x = EffectSize, y = -log10(q.value), label = Gene), 
+                   size=2, nudge_x = 0.1, nudge_y = 0.1) + 
+  geom_point(data = ttest_Rhabdoid_v_all[ttest_Rhabdoid_v_all$Gene == "TP53",,drop=F], 
+             aes(x = EffectSize, y = -log10(q.value)), fill = "#00aeef", size = 2,  pch=21, stroke = 0.25) + 
+  geom_text_repel(data = ttest_Rhabdoid_v_all[ttest_Rhabdoid_v_all$Gene == "TP53",,drop=F], 
+                   aes(x = EffectSize, y = -log10(q.value), label = Gene), 
+                   size=2, nudge_x = -0.1, nudge_y = 0.1) + 
+  geom_point(data = ttest_Rhabdoid_v_all[ttest_Rhabdoid_v_all$Gene == "NABP2",,drop=F], 
+             aes(x = EffectSize, y = -log10(q.value)), fill = "pink", size = 2,  pch=21, stroke = 0.25) + 
+  geom_text_repel(data = ttest_Rhabdoid_v_all[ttest_Rhabdoid_v_all$Gene == "NABP2",,drop=F], 
+                   aes(x = EffectSize, y = -log10(q.value), label = Gene), 
+                   size=2, nudge_x = -0.1, nudge_y = 0.1) +
+  geom_point(data = ttest_Rhabdoid_v_all[ttest_Rhabdoid_v_all$Gene == "PUM3",,drop=F], 
+             aes(x = EffectSize, y = -log10(q.value)), fill = "pink", size = 2,  pch=21, stroke = 0.25) + 
+  geom_text_repel(data = ttest_Rhabdoid_v_all[ttest_Rhabdoid_v_all$Gene == "PUM3",,drop=F], 
+                   aes(x = EffectSize, y = -log10(q.value), label = Gene), 
+                   size=2, nudge_x = -0.1, nudge_y = 0.1) +
+  geom_point(data = ttest_Rhabdoid_v_all[ttest_Rhabdoid_v_all$Gene == "CUL4A",,drop=F], 
+             aes(x = EffectSize, y = -log10(q.value)), fill = "cyan", size = 3,  pch=21, stroke = 0.25) + 
+  geom_point(data = ttest_Rhabdoid_v_all[ttest_Rhabdoid_v_all$Gene == "DCAF15",,drop=F], 
+             aes(x = EffectSize, y = -log10(q.value)), fill = "magenta", size = 3,  pch=21, stroke = 0.25) + 
+   geom_point(data = ttest_Rhabdoid_v_all[ttest_Rhabdoid_v_all$Gene == "DCAF13",,drop=F], 
+             aes(x = EffectSize, y = -log10(q.value)), fill = "blue", size = 3,  pch=21, stroke = 0.25) + 
+    ggtitle("Avana 21q1 Public: Rhabdoid v all others") + scale_x_continuous(breaks = round(seq(-0.9, 2, 0.3),2))
+
+p
+ggsave(plot = p, filename = "figures/DCAF5_Avana21q1_Rhabdoid_v_all_others_volcano_final.pdf", width = 2.5, height = 2.5, limitsize=FALSE, useDingbats=FALSE)
+```
+## Subset other cell lines
+
+we want to divide the "other" cell lines into 
+(1) other that contain SWI/SNF mutations 
+(2) other than do not contain SWI/SNF mutations 
+
+
+```{r}
+BAF <- c("SMARCA2","SMARCB1","ARID1B", "SMARCD1", "ACTL6A",  "SMARCC2", "SMARCD2", "SMARCD3", "ARID1A","SMARCA4", "ACTL6B",  "SMARCE1", "SMARCC1", "DPF2", "BRD9", "BCL7A", "BCL7B", "BCL7C", "PBRM1", "PHF10", "SS18", "BRD7", "GLTSCR1", "ARID2" )
+ccle_baf <- ccle[ccle$Hugo_Symbol %in% BAF & ccle$isDeleterious == "True",]
+dim(ccle_baf)
+length(unique(ccle_baf$DepMap_ID))
+```
+
+download the ccle_mutation data
+
+```{r}
+ccle <- fread("https://figshare.com/ndownloader/files/26261527")
+# ccle[ccle$Hugo_Symbol %in% BAF & ccle$isDeleterious == "True",]
+ccle <- as.data.frame(ccle)
+table(ccle$Hugo_Symbol %in% BAF)
+table(ccle$Hugo_Symbol %in% BAF & ccle$isDeleterious == "TRUE")
+ccle_baf <- ccle[ccle$Hugo_Symbol %in% BAF & ccle$isDeleterious == "TRUE",]
+dim(ccle_baf)
+length(unique(ccle_baf$DepMap_ID))
+ccle_baf
+```
+## t-test for RTs vs. otherSWISNF mutant lines
+
+```{r}
+effect <- as.data.frame(gene_effect[,grepl("DCAF5", colnames(gene_effect))])
+colnames(gene_effect)
+class(names(gene_effect))
+dim(effect)
+# spot check
+effect[grepl("G401", rownames(effect)),]
+# row names are ccle names, I need a column of DepMap IDs
+head(sample_info)
+effect$DepMapID <- ""
+colnames(sample_info)
+sample_info <- as.data.frame(sample_info)
+class(sample_info)
+sample_info[1,1]
+# add DepMapID onto each row
+for (i in 1:nrow(effect)){
+  curr_name <- rownames(effect)[i]
+  curr_depmap_id <- sample_info[sample_info$CCLE_Name == curr_name,1]
+  effect$DepMapID[i] <- curr_depmap_id
+}
+
+effect_subset_RTs_swisnfMUT <- effect[rownames(effect) %in% Rhabdoid_lines | effect$DepMapID %in% ccle_baf$DepMap_ID,]
+dim(effect_subset_RTs_swisnfMUT)
+context_matrix_rt_swisnfMUT <- effect_subset_RTs_swisnfMUT[,1,drop=F]
+colnames(context_matrix_rt_swisnfMUT) <- "Rhabdoid"
+context_matrix_rt_swisnfMUT$Rhabdoid <- 0
+context_matrix_rt_swisnfMUT[rownames(context_matrix_rt_swisnfMUT) %in% Rhabdoid_lines,1] <- 1
+# get a subset gene_effect for these lines 
+gene_effect_subset1 <- gene_effect[rownames(gene_effect) %in% rownames(context_matrix_rt_swisnfMUT),]
+
+ttest_Rhabdoid_v_swisnif <- run_lm_stats_limma(gene_effect_subset1, context_matrix_rt_swisnfMUT[,1])
+ttest_Rhabdoid_v_swisnif$Gene <- gsub("\\ .*","",ttest_Rhabdoid_v_swisnif$Gene)
+ttest_Rhabdoid_v_swisnif <- ttest_Rhabdoid_v_swisnif
+ttest_Rhabdoid_v_swisnif$logq <- -log10(ttest_Rhabdoid_v_swisnif$q.value)
+write.table(ttest_Rhabdoid_v_swisnif, file="ttest_Rhabdoid_v_swisnf_avana_21Q1.txt")
+
+```
+## t-test for RTs vs. other non-swisnf mutant lines 
+
+```{r}
+'%!in%' <- function(x,y)!('%in%'(x,y))
+table(effect$DepMapID %!in% ccle_baf$DepMap_ID)
+effect_subset_RTs_NoSwisnf<- effect[rownames(effect) %in% Rhabdoid_lines | effect$DepMapID %!in% ccle_baf$DepMap_ID,]
+dim(effect_subset_RTs_NoSwisnf)
+# 616 - 14 (RTs) +187 (mutant swisnf) = 789 total other
+context_matrix_rt_NoSwisnf <- effect_subset_RTs_NoSwisnf[,1,drop=F]
+colnames(context_matrix_rt_NoSwisnf) <- "Rhabdoid"
+context_matrix_rt_NoSwisnf$Rhabdoid <- 0
+context_matrix_rt_NoSwisnf[rownames(context_matrix_rt_NoSwisnf) %in% Rhabdoid_lines,1] <- 1
+# get a subset gene_effect for these lines 
+gene_effect_subset2 <- gene_effect[rownames(gene_effect) %in% rownames(context_matrix_rt_NoSwisnf),]
+dim(gene_effect_subset2)
+ttest_Rhabdoid_v_NoSswisnif <- run_lm_stats_limma(gene_effect_subset2, context_matrix_rt_NoSwisnf[,1])
+ttest_Rhabdoid_v_NoSswisnif$Gene <- gsub("\\ .*","",ttest_Rhabdoid_v_swisnif$Gene)
+ttest_Rhabdoid_v_NoSswisnif <- ttest_Rhabdoid_v_NoSswisnif
+ttest_Rhabdoid_v_NoSswisnif$logq <- -log10(ttest_Rhabdoid_v_NoSswisnif$q.value)
+write.table(ttest_Rhabdoid_v_NoSswisnif, file="ttest_Rhabdoid_v_NoSwisnf_avana_21Q1.txt")
+
+```
+
+## Session Info
+
+```{r session_info, include=TRUE, echo=TRUE, results='markup'}
+devtools::session_info()
+```
+
+```{r include=TRUE}
+as.data.frame(`Dataset Used`) %>% datatable(options=list(scrollX=T))
+```
+
+
+```{r}
+sessionInfo()
+
+```
